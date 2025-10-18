@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pràctiques</title>
+  <style>
+    :root {
+      --bg:#f6f7f9; --card:#ffffff; --text:#1a1a1a; --muted:#9ca3af;
+      --green1:#10b981; --green2:#34d399;
+    }
+    body.dark {
+      --bg:#121212; --card:#2b2b2b; --text:#f1f1f1; --muted:#a1a1a1;
+    }
+    body {
+      margin:0; padding:16px; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto; transition:background .3s,color .3s;
+    }
+
+    /* Topbar / buttons */
+    .topbar {display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+    button {border:none;border-radius:6px;padding:6px 10px;background:var(--card);color:var(--text);
+            box-shadow:0 2px 6px rgba(0,0,0,.1);cursor:pointer;}
+    /* Interruptor custom (per al mode fosc i per la vista) */
+    .switch {position:relative;display:inline-block;width:50px;height:24px;vertical-align:middle}
+    .switch input {opacity:0;width:0;height:0}
+    .slider-toggle {position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#666;border-radius:24px;transition:.4s}
+    .slider-toggle:before {position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.4s}
+    .switch input:checked + .slider-toggle {background:#999}
+    .switch input:checked + .slider-toggle:before {transform:translateX(26px)}
+
+    .settings {position:relative;}
+    .settings-menu {
+      display:none; position:absolute; right:0; top:36px; background:var(--card);
+      border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.2); padding:10px; z-index:10;
+    }
+    .settings-menu label {display:block;margin:6px 0; cursor:pointer; font-size:0.95rem}
+
+    /* Card base (this matches your original line-view layout) */
+    .card {
+      display:flex; align-items:center; gap:10px; justify-content:space-between;
+      padding:10px; border-radius:12px; margin-bottom:10px;
+      box-shadow:0 2px 6px rgba(0,0,0,.08); transition:.3s;
+      background:var(--card);
+    }
+    .card.entregada { background: var(--green1) !important; color: white !important; }
+    body.dark .card.entregada { background: #059669 !important; color: white !important; }
+    .card.expirada { background:#ef4444 !important; color:white !important; }
+
+    input[type=text], input[type=date], select {
+      border:none; background:transparent; color:inherit; padding:4px; border-bottom:1px solid var(--muted);
+    }
+
+    input[type=range]{-webkit-appearance:none;width:100px;height:8px;background:transparent;}
+    input[type=range]::-webkit-slider-runnable-track{
+      height:8px;border-radius:4px;background:linear-gradient(90deg,var(--green1),var(--green2));
+      box-shadow:inset 0 1px 3px rgba(0,0,0,.2);
+    }
+    input[type=range]::-webkit-slider-thumb{
+      -webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+      background:white;border:3px solid var(--green2);
+      box-shadow:0 2px 4px rgba(0,0,0,.3);margin-top:-5px;
+    }
+
+    .battery { width:20px; height:50px; border-radius:6px; background:#E6E9EE; position:relative; overflow:hidden; }
+    .charge { position:absolute; bottom:0; left:0; right:0; height:0; transition:height .3s, background .3s; }
+
+    .note { display:none; width:50px; text-align:center; border-radius:6px; border:none; padding:4px; }
+    .delete { color:red; font-size:20px; cursor:pointer; }
+
+    .pct-btn { padding:4px 8px; border-radius:6px; background:var(--card); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+
+    /* Themes (unchanged) */
+    .tema-blau { background:#3b82f6; color:#fff; }
+    .tema-rosa { background:#ec4899; color:#fff; }
+    .tema-taronja { background:#f97316; color:#fff; }
+    .tema-porpra { background:#8b5cf6; color:#fff; }
+    .tema-vermell { background:#ef4444; color:#fff; }
+    .tema-groc { background:#eab308; color:#000; }
+
+    /* Filter bar */
+    #filterBar { margin-bottom:16px; }
+
+    /***** GRID VIEW: separate styles only applied when #list has .grid-view *****/
+    #list.grid-view { display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+    #list.grid-view .card {
+      display:flex; flex-direction:column; align-items:flex-start; gap:8px;
+      padding:14px; max-width:none;
+    }
+
+    /* Title shown in grid view; hidden in line view (line view keeps original input) */
+    .title { font-weight:700; font-size:1.05rem; cursor:pointer; display:none; }
+    .title-input { display:none; border:none; border-bottom:1px solid var(--muted); padding:2px 4px; font-weight:700; background:transparent; color:inherit; }
+
+    /* When in grid view, show title and hide inline name input */
+    #list.grid-view .title { display:block; }
+    #list.grid-view input.name-input { display:none; }
+
+    /* dates: in grid view we hide date inputs once filled and show edit button */
+    .edit-dates { display:none; border:none; background:transparent; cursor:pointer; font-size:0.95rem; padding:4px; border-radius:6px; }
+    #list.grid-view .edit-dates { display:none; } /* controlled by JS per-card when dates set */
+
+    /* battery larger in grid view */
+    #list.grid-view .battery { width:34px; height:78px; border-radius:8px; }
+    #list.grid-view .charge { transition:height .3s, background .3s; }
+
+    /* trash at bottom-right inside card in grid */
+    #list.grid-view .delete { position:absolute; right:10px; bottom:10px; }
+
+    /* make 'mark' button smaller in grid */
+    .mark { padding:6px 10px; border-radius:6px; }
+    #list.grid-view .mark { padding:4px 6px; font-size:0.85rem; }
+
+    /* compact assignatura select in grid */
+    #list.grid-view .assignatura { max-width:220px; padding:6px; border-radius:6px; border:1px solid var(--muted); background:var(--card); }
+
+    /* overdue style */
+    .days.overdue { color:#ef4444; font-weight:700; }
+
+    /* ensure line-view container default */
+    #list.list-view { display:block; }
+
+    /* small responsive tweaks */
+    @media (max-width:420px){
+      .card{padding:8px}
+      #list.grid-view{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <button id="addBtn" aria-label="Afegir targeta">➕</button>
+    <div class="settings">
+      <button id="gearBtn" aria-label="Configuració">⚙️</button>
+      <div class="settings-menu" id="settingsMenu">
+        <!-- Dark mode switch -->
+        <label class="switch" style="margin-right:8px">
+          <input type="checkbox" id="darkToggle"/>
+          <span class="slider-toggle"></span>
+        </label> Mode fosc
+
+        <!-- Theme select (unchanged behaviour) -->
+        <label style="margin-top:8px;display:block">Tema:
+          <select id="themeSelect">
+            <option value="tema-blau">Blau</option>
+            <option value="tema-rosa">Rosa</option>
+            <option value="tema-taronja">Taronja</option>
+            <option value="tema-porpra">Porpra</option>
+            <option value="tema-vermell">Vermell</option>
+            <option value="tema-groc">Groc</option>
+          </select>
+        </label>
+
+        <!-- VIEW toggle: custom switch, not a dropdown -->
+        <label style="margin-top:8px;display:flex;align-items:center;gap:8px">
+          <span>Vista quadrícula</span>
+          <label class="switch">
+            <input type="checkbox" id="viewToggle"/>
+            <span class="slider-toggle"></span>
+          </label>
+        </label>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtre assignatures (restored all options exactly as original) -->
+  <div id="filterBar">
+    <label for="filterSelect">Filtrar per assignatura:</label>
+    <select id="filterSelect">
+      <option value="totes">Totes</option>
+      <option value="1300">1300. Control, Edició i Mescla de So</option>
+      <option value="1301">1301. Preparació de Sessions de Videodiscjòquei</option>
+      <option value="1302">1302. Animació Musical en Viu</option>
+      <option value="1303">1303. Animació Visual en Viu</option>
+      <option value="1708">1708. Sostenibilitat aplicada al sistema productiu</option>
+      <option value="1710">1710. Itinerari personal per a l'ocupabilitat II</option>
+      <option value="1713">1713. Projecte Intermodular</option>
+    </select>
+  </div>
+
+  <!-- list container: default is list-view (line view identical as original) -->
+  <div id="list" class="list-view"></div>
+
+<script>
+/* ====== Core DOM refs ====== */
+const list = document.getElementById('list');
+const gearBtn = document.getElementById('gearBtn');
+const settingsMenu = document.getElementById('settingsMenu');
+const darkToggle = document.getElementById('darkToggle');
+const themeSelect = document.getElementById('themeSelect');
+const filterSelect = document.getElementById('filterSelect');
+const viewToggle = document.getElementById('viewToggle');
+
+const themes = ['tema-blau','tema-rosa','tema-taronja','tema-porpra','tema-vermell','tema-groc'];
+
+/* ----- Settings menu open/close ----- */
+gearBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
+});
+document.addEventListener('click', (e) => {
+  if (!settingsMenu.contains(e.target) && e.target !== gearBtn) settingsMenu.style.display = 'none';
+});
+
+/* ----- Dark mode toggle ----- */
+darkToggle.addEventListener('change', () => {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('darkMode', darkToggle.checked ? '1' : '0');
+});
+
+/* ----- Theme select ----- */
+function applyTheme(){
+  const theme = themeSelect.value;
+  document.querySelectorAll('.card').forEach(card => {
+    // keep special states (entregada/expirada) overriding theme
+    if (!card.classList.contains('entregada') && !card.classList.contains('expirada')) {
+      // preserve card as "card <theme>"
+      card.className = 'card ' + theme;
+    }
+  });
+  localStorage.setItem('theme', theme);
+}
+themeSelect.addEventListener('change', applyTheme);
+
+/* ----- View toggle: list <-> grid ----- */
+function setGridMode(on){
+  if(on){
+    list.classList.add('grid-view');
+    list.classList.remove('list-view');
+  }else{
+    list.classList.add('list-view');
+    list.classList.remove('grid-view');
+  }
+  localStorage.setItem('viewMode', on ? 'grid' : 'list');
+}
+viewToggle.addEventListener('change', () => setGridMode(viewToggle.checked));
+
+/* Utility: create element from html */
+function createFromHTML(html){ const tpl = document.createElement('template'); tpl.innerHTML = html.trim(); return tpl.content.firstChild; }
+
+/* ====== Card creation (preserve original line-view behavior) ======
+   We'll include both:
+     - an input.name-input (used in line-view, visible there)
+     - a div.title (used in grid-view, visible there)
+   Behavior:
+     - In line-view: show input.name-input, hide .title
+     - In grid-view: show .title, hide input.name-input
+   For editing title in grid-view: clicking .title will show the same input (temporarily) to edit.
+   Dates hiding: only auto-hide in grid-view when both dates are set; in line-view dates remain visible as before.
+*/
+function createCard(data = {}) {
+  const card = document.createElement('div');
+  const theme = themeSelect.value || '';
+  card.className = 'card ' + theme;
+
+  // Build inner HTML matching original structure but adding title & name-input coexistence
+  card.innerHTML = `
+    <input type="text" class="name-input" placeholder="Nom" value="${escapeHtml(data.nom||'')}" />
+    <div class="title" style="display:none">${escapeHtml(data.nom||'Nom')}</div>
+
+    <input type="date" class="pub" value="${data.pub||''}"/>
+    <input type="date" class="due" value="${data.due||''}"/>
+    <button class="edit-dates" style="display:none">✏️</button>
+
+    <select class="assignatura">
+      <option value="">--Assignatura--</option>
+      <option value="1300">1300. Control, Edició i Mescla de So</option>
+      <option value="1301">1301. Preparació de Sessions de Videodiscjòquei</option>
+      <option value="1302">1302. Animació Musical en Viu</option>
+      <option value="1303">1303. Animació Visual en Viu</option>
+      <option value="1708">1708. Sostenibilitat aplicada al sistema productiu</option>
+      <option value="1710">1710. Itinerari personal per a l'ocupabilitat II</option>
+      <option value="1713">1713. Projecte Intermodular</option>
+    </select>
+
+    <div class="days" style="width:180px;text-align:center;font-weight:600"></div>
+
+    <button class="pct-btn">${data.progress||0}%</button>
+    <input type="range" min="0" max="100" value="${data.progress||0}" class="slider" style="display:none"/>
+
+    <button class="mark">${data.entregada ? 'ENTREGAT' : 'MARCAR'}</button>
+
+    <input type="text" class="note" placeholder="Nota" value="${escapeHtml(data.note||'')}" ${data.entregada ? 'style="display:inline-block"' : ''}/>
+
+    <div class="battery"><div class="charge"></div></div>
+
+    <span class="delete">🗑️</span>
+  `;
+
+  // references
+  const nameInput = card.querySelector('.name-input');
+  const titleDiv = card.querySelector('.title');
+  const pub = card.querySelector('.pub');
+  const due = card.querySelector('.due');
+  const editBtn = card.querySelector('.edit-dates');
+  const asg = card.querySelector('.assignatura');
+  const daysDiv = card.querySelector('.days');
+  const slider = card.querySelector('.slider');
+  const pctBtn = card.querySelector('.pct-btn');
+  const mark = card.querySelector('.mark');
+  const note = card.querySelector('.note');
+  const batteryCharge = card.querySelector('.charge');
+  const del = card.querySelector('.delete');
+
+  // set assignatura if provided
+  if(data.assignatura) asg.value = data.assignatura;
+
+  // keep title and input in sync:
+  nameInput.addEventListener('input', () => {
+    titleDiv.textContent = nameInput.value || 'Nom';
+    saveCards();
+  });
+
+  // GRID VIEW: clicking title should allow edit: reveal the hidden input temporarily
+  titleDiv.addEventListener('click', () => {
+    // show input even if hidden in CSS; we temporarily show it for editing
+    titleDiv.style.display = 'none';
+    nameInput.style.display = 'inline-block';
+    nameInput.focus();
+    nameInput.select();
+  });
+  // when editing finishes (blur or Enter) -> hide input if in grid and update title
+  function finishNameEdit(e){
+    if(e && e.type === 'keydown' && e.key !== 'Enter') return;
+    const val = nameInput.value.trim() || 'Nom';
+    nameInput.value = val;
+    titleDiv.textContent = val;
+    // if grid view active, show title and hide input; in line view keep input visible
+    if(list.classList.contains('grid-view')){
+      nameInput.style.display = 'none';
+      titleDiv.style.display = 'block';
+    } else {
+      nameInput.style.display = 'inline-block';
+      titleDiv.style.display = 'none';
+    }
+    saveCards();
+  }
+  nameInput.addEventListener('blur', finishNameEdit);
+  nameInput.addEventListener('keydown', finishNameEdit);
+
+  // Dates logic: compute days / overdue. Dates auto-hide only in GRID view.
+  function updateDaysAndVisibility(){
+    // overdue check
+    if(!pub.value || !due.value){
+      daysDiv.textContent = "Tens -, i te'n queden -";
+    } else {
+      const a = new Date(pub.value);
+      const b = new Date(due.value);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const total = Math.max(Math.ceil((b - a) / (1000*60*60*24)), 0);
+      const remaining = Math.ceil((b - today) / (1000*60*60*24));
+      if(remaining < 0 && !card.classList.contains('entregada')){
+        daysDiv.textContent = "OVERDUE";
+        daysDiv.classList.add('overdue');
+        card.classList.add('expirada');
+      } else {
+        daysDiv.textContent = `Tens ${total} dies, i te'n queden ${remaining}`;
+        daysDiv.classList.remove('overdue');
+        card.classList.remove('expirada');
+      }
+    }
+
+    // Only in grid view: hide date inputs when both set; show edit button
+    if(list.classList.contains('grid-view')){
+      if(pub.value && due.value){
+        pub.style.display = 'none';
+        due.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+      } else {
+        pub.style.display = 'inline-block';
+        due.style.display = 'inline-block';
+        editBtn.style.display = 'none';
+      }
+      // show title and hide nameInput in grid mode
+      titleDiv.style.display = 'block';
+      nameInput.style.display = 'none';
+    } else {
+      // list-view: keep dates visible, name input visible, title hidden
+      pub.style.display = 'inline-block';
+      due.style.display = 'inline-block';
+      editBtn.style.display = 'none';
+      titleDiv.style.display = 'none';
+      nameInput.style.display = 'inline-block';
+    }
+  }
+  pub.addEventListener('change', () => { updateDaysAndVisibility(); saveCards(); });
+  due.addEventListener('change', () => { updateDaysAndVisibility(); saveCards(); });
+  editBtn.addEventListener('click', () => {
+    pub.style.display = 'inline-block';
+    due.style.display = 'inline-block';
+    editBtn.style.display = 'none';
+  });
+
+  // Battery visual
+  function updateBattery(val){
+    batteryCharge.style.height = val + '%';
+    if(val < 30) batteryCharge.style.background = '#ef4444';
+    else if(val < 70) batteryCharge.style.background = '#eab308';
+    else batteryCharge.style.background = '#10b981';
+  }
+  updateBattery(data.progress || 0);
+  pctBtn.addEventListener('click', () => { slider.style.display = 'inline-block'; });
+  slider.addEventListener('input', () => {
+    pctBtn.textContent = slider.value + '%';
+    updateBattery(slider.value);
+  });
+  slider.addEventListener('change', () => {
+    slider.style.display = 'none';
+    saveCards();
+  });
+
+  // Mark delivered smaller in grid (CSS handles visual). Toggle delivered state.
+  if(data.entregada) card.classList.add('entregada');
+  mark.addEventListener('click', () => {
+    const entregada = card.classList.toggle('entregada');
+    if(entregada){
+      mark.textContent = 'ENTREGAT';
+      slider.value = 100; pctBtn.textContent = '100%'; updateBattery(100);
+      note.style.display = 'inline-block';
+    } else {
+      mark.textContent = 'MARCAR';
+      slider.value = 0; pctBtn.textContent = '0%'; updateBattery(0);
+      note.style.display = 'none'; note.value = '';
+      // restore theme class (non-entregada)
+      card.className = 'card ' + (themeSelect.value || '');
+    }
+    updateDaysAndVisibility();
+    saveCards();
+  });
+
+  // Delete
+  del.addEventListener('click', () => {
+    if(confirm("Vols eliminar la targeta?")) {
+      card.remove();
+      saveCards();
+    }
+  });
+
+  // When assignatura changes apply save
+  asg.addEventListener('input', saveCards);
+  note.addEventListener('input', saveCards);
+
+  // Initialize days/visibility based on current view
+  updateDaysAndVisibility();
+
+  // Prepend card to list
+  list.prepend(card);
+}
+
+/* ====== Storage functions ====== */
+function saveCards(){
+  const cards = [...document.querySelectorAll('.card')].map(card => {
+    return {
+      nom: card.querySelector('.name-input') ? card.querySelector('.name-input').value : '',
+      pub: card.querySelector('.pub') ? card.querySelector('.pub').value : '',
+      due: card.querySelector('.due') ? card.querySelector('.due').value : '',
+      assignatura: card.querySelector('.assignatura') ? card.querySelector('.assignatura').value : '',
+      progress: card.querySelector('.slider') ? card.querySelector('.slider').value : 0,
+      entregada: card.classList.contains('entregada'),
+      note: card.querySelector('.note') ? card.querySelector('.note').value : ''
+    };
+  });
+  localStorage.setItem('cards', JSON.stringify(cards));
+}
+
+function loadCards(){
+  const saved = localStorage.getItem('cards');
+  if(saved){
+    JSON.parse(saved).forEach(c => createCard(c));
+  }
+}
+
+/* ====== Add button ====== */
+document.getElementById('addBtn').addEventListener('click', () => {
+  createCard();
+  saveCards();
+});
+
+/* ====== Filter assignatures (same behaviour as original) ====== */
+filterSelect.addEventListener('change', () => {
+  const val = filterSelect.value;
+  document.querySelectorAll('.card').forEach(card => {
+    const asg = card.querySelector('.assignatura').value;
+    if(val === 'totes' || asg === val) card.style.display = '';
+    else card.style.display = 'none';
+  });
+});
+
+/* ====== Restore settings on load ====== */
+window.addEventListener('DOMContentLoaded', () => {
+  // dark
+  const savedDark = localStorage.getItem('darkMode');
+  if(savedDark === '1'){ document.body.classList.add('dark'); darkToggle.checked = true; }
+
+  // theme
+  const savedTheme = localStorage.getItem('theme');
+  if(savedTheme && themes.includes(savedTheme)) themeSelect.value = savedTheme;
+
+  // view
+  const savedView = localStorage.getItem('viewMode');
+  if(savedView){
+    if(savedView === 'grid'){ viewToggle.checked = true; setGridMode(true); }
+    else { viewToggle.checked = false; setGridMode(false); }
+  } else {
+    // default to list (line) view to preserve original behaviour
+    viewToggle.checked = false; setGridMode(false);
+  }
+
+  loadCards();
+  applyTheme();
+});
+
+/* ====== Small helper ====== */
+function escapeHtml(s){
+  if(!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+</script>
+</body>
+</html>
